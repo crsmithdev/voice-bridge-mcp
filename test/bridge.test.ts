@@ -50,6 +50,12 @@ describe("manifest", () => {
     expect(() => parseManifest(`[tools.x]\ndescription="d"\ncommand=["a"]\n[tools.x.args.y]\nflag="-y"\nposition=1`)).toThrow("exactly one");
     expect(() => parseManifest(`[tools.x]\ndescription="d"\ncommand=["a"]\n[tools.x.args.y]\nposition=1\nvariadic=true\n[tools.x.args.z]\nposition=2`)).toThrow("last positional");
   });
+  test("a fixed positional is emitted and hidden", () => {
+    const m = parseManifest(`[tools.g]\ndescription="d"\ncommand=["g"]\n[tools.g.args.a]\nposition=1\n[tools.g.args.verb]\nposition=2\nfixed="choose"\n[tools.g.args.b]\nposition=3`);
+    expect(Object.keys(inputShape(m.tools.g!))).toEqual(["a", "b"]);
+    expect(buildArgv(m.tools.g!, { a: "x", b: "y" })).toEqual(["g", "x", "choose", "y"]);
+    expect(() => parseManifest(`[tools.g]\ndescription="d"\ncommand=["g"]\n[tools.g.args.a]\nflag="-a"\nfixed="x"`)).toThrow("fixed");
+  });
   test("a later positional needs the earlier one", () => {
     const m = parseManifest(`[tools.g]\ndescription="d"\ncommand=["g"]\n[tools.g.args.a]\nposition=1\n[tools.g.args.b]\nposition=2`);
     expect(() => buildArgv(m.tools.g!, { b: "x" })).toThrow("b needs a");

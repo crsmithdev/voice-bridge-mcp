@@ -50,6 +50,9 @@ required = true
 [tools.gate.args.targets]
 position = 3
 variadic = true                     # a list, the last positional
+[tools.gate.args.verb]
+position = 2
+fixed = "choose"                    # always emitted, never shown to the model
 ```
 
 Argument `type` is `string` (default), `number`, or `boolean`. Every project

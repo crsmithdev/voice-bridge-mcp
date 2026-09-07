@@ -19,6 +19,7 @@
  *   position = 1                          # or: the nth positional after the command
  *   variadic = true                       # a positional that takes a list
  *   required = true
+ *   fixed = "choose"                      # a positional the model never sees, always emitted
  */
 import { z, type ZodTypeAny } from "zod";
 
@@ -30,6 +31,7 @@ export type ArgSpec = {
   position?: number;
   variadic?: boolean;
   required?: boolean;
+  fixed?: string;
 };
 
 export type ToolSpec = {
@@ -62,6 +64,7 @@ export function parseManifest(text: string, where = "mcp.toml"): Manifest {
       if (a.variadic && a.position === undefined) throw new Error(`${where}: tools.${name}.args.${arg} is variadic but not positional`);
       if (a.type && !["string", "number", "boolean"].includes(a.type)) throw new Error(`${where}: tools.${name}.args.${arg}.type must be string, number or boolean`);
       if (a.type === "boolean" && a.position !== undefined) throw new Error(`${where}: tools.${name}.args.${arg} is boolean and must be a flag`);
+      if (a.fixed !== undefined && (typeof a.fixed !== "string" || a.position === undefined || a.variadic)) throw new Error(`${where}: tools.${name}.args.${arg}.fixed must be a string on a non-variadic positional`);
     }
     // a variadic positional must be the last positional, or the list would swallow what follows
     const args = Object.values<any>(t.args ?? {});
@@ -75,6 +78,7 @@ export function parseManifest(text: string, where = "mcp.toml"): Manifest {
 export function inputShape(tool: ToolSpec): Record<string, ZodTypeAny> {
   const shape: Record<string, ZodTypeAny> = {};
   for (const [name, a] of Object.entries(tool.args ?? {})) {
+    if (a.fixed !== undefined) continue;
     let s: ZodTypeAny = a.enum ? z.enum(a.enum as [string, ...string[]]) : a.type === "number" ? z.number() : a.type === "boolean" ? z.boolean() : z.string();
     if (a.variadic) s = z.array(s);
     if (a.description) s = s.describe(a.description);
@@ -90,7 +94,7 @@ export function buildArgv(tool: ToolSpec, input: Record<string, unknown>): strin
   const argv = [...tool.command];
   let stopped: string | null = null;
   for (const [name, a] of positional) {
-    const v = input[name];
+    const v = a.fixed ?? input[name];
     if (v === undefined || v === null || (Array.isArray(v) && !v.length)) { if (a.required) throw new Error(`${name} is required`); stopped = name; continue; }
     if (stopped) throw new Error(`${name} needs ${stopped} too`);
     for (const x of Array.isArray(v) ? v : [v]) argv.push(String(x));
