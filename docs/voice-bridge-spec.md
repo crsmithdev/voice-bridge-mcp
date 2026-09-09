@@ -159,13 +159,27 @@ project bridge stays in place.
 
 8.6 The hard ceiling.
 
-8.6.1 The hard ceiling is a last-resort limit. If a turn runs past an absolute maximum time, the bridge restarts the process even if it is not sure there is a fault.
+8.6.1 The hard ceiling is a last-resort limit on the length of one turn. It covers the fault that the first two detectors cannot see: a process that gives activity without end and is wrong at the same time. Such a process resets the silence timer forever and can do this without a compaction message.
 
-8.6.2 A restart at the ceiling is safe because actions are atomic and the bridge commits before a risky step.
+8.6.2 The ceiling acts in three stages. Each stage does more than the stage before it. The bridge does not go to a later stage if an earlier stage works. The reason for the stages is that the ceiling, unlike the other two detectors, can fire on a process that is fully healthy and only slow.
 
-8.6.3 The hard ceiling covers the fault that the first two detectors cannot see: a process that gives activity without end and is wrong at the same time. Such a process resets the silence timer forever and can do this without a compaction message.
+8.6.3 Stage one is the checkpoint. At the ceiling time the bridge speaks. The bridge says how long the turn has run. The bridge asks for the agreement word of 10.2.
 
-8.6.4 The ceiling time is a setting. The value is open (see 19.4).
+8.6.4 If Chris says the agreement word within the checkpoint window, the turn continues for one more ceiling time. This can repeat without a limit. Each extension spends more tokens, so the bridge reports the usage with each checkpoint.
+
+8.6.5 Stage two is the interrupt. If the bridge does not hear the agreement word within the checkpoint window, the bridge interrupts the turn. The bridge does not stop the process. The conversation, the context and the session stay.
+
+8.6.6 The interrupt fails closed, as 10.5 requires. Fail closed is correct here because the cost of a wrong interrupt is low: the session stays, and Chris asks again in the next turn.
+
+8.6.7 Stage three is the restart. After the interrupt the bridge waits for the process to be ready for a new turn. If the process is not ready within the grace time, the interrupt did not work and the process is wedged. The bridge then restarts the process.
+
+8.6.8 A restart at the ceiling is safe because actions are atomic and the bridge commits before a risky step.
+
+8.6.9 The default ceiling time is ten minutes. The default checkpoint window is fifteen seconds. The default grace time is thirty seconds. Each of the three is a setting.
+
+8.6.10 The ceiling timer measures one turn. A new turn starts the timer again.
+
+8.6.11 The ceiling is the unattended backstop. Chris ends a turn himself at any time with the command of 9.4.8. The ceiling exists for the case where Chris is not listening.
 
 8.7 The process-memory recycle.
 
@@ -271,7 +285,7 @@ project bridge stays in place.
 
 13.4 The compaction-loop detector (8.5) also protects cost, because a compaction loop spends tokens fast.
 
-13.5 The hard ceiling (8.6) bounds the cost of one turn in the worst case.
+13.5 The hard ceiling (8.6) bounds the cost of one turn in the worst case. A turn only runs past the ceiling if Chris says the agreement word, and the bridge reports the usage each time it asks.
 
 13.6 The local speech engine has no per-use cost.
 
@@ -361,7 +375,7 @@ project bridge stays in place.
 
 19.3 Lock-screen controls. Deferred to the design of the app. See 17.5.
 
-19.4 Turn limit. Two separate limits, not one. The silence limit is one minute of no output on any channel; a busy turn does not trip it. The hard ceiling is a separate absolute limit on turn length. OPEN: the ceiling time, and whether the bridge restarts at the ceiling or asks Chris first. See 8.4 and 8.6.
+19.4 Turn limit. Two separate limits, not one. The silence limit is one minute of no output on any channel; a busy turn does not trip it. The hard ceiling is a separate limit on turn length, set at ten minutes, and it escalates: it speaks and asks, then interrupts the turn, then restarts the process only if the interrupt does not work. See 8.4 and 8.6.
 
 19.5 Text-to-speech voice. Take the first working local voice. Do not wait for a decision. The engine is replaceable and the voice is a setting, but each replacement is also local: the voice path is local only, with no cloud engine and no cloud fallback. See 4.5 and 4.8.
 
@@ -382,7 +396,9 @@ project bridge stays in place.
 | Setting | Default | Section |
 | --- | --- | --- |
 | Silence time before a restart | 1 minute | 8.4.3 |
-| Hard ceiling for a turn | to set, see 19.4 | 8.6.4 |
+| Hard ceiling for a turn | 10 minutes | 8.6.9 |
+| Checkpoint window at the ceiling | 15 seconds | 8.6.9 |
+| Grace time before a restart | 30 seconds | 8.6.9 |
 | Compaction-loop limit | 3 messages | 8.5.2 |
 | Compaction-loop window | 5 minutes | 8.5.2 |
 | Process-memory recycle limit | 4 gigabytes | 8.7.2 |
