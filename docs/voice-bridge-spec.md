@@ -129,19 +129,17 @@ project bridge stays in place.
 
 8.2 The bridge monitors the health of the process. The bridge does extra self-management because of the JSON API.
 
-8.3 The bridge uses two independent fault detectors. Each detector finds a different kind of fault. The inactivity detector finds a process that stopped. The compaction-loop detector finds a process that is busy but stuck.
+8.3 The bridge uses three independent fault detectors. Each detector finds a different kind of fault. The silence detector finds a process that stopped. The compaction-loop detector finds a process that is busy but stuck. The hard ceiling catches any fault that gets past the first two.
 
-8.4 The inactivity detector.
+8.4 The silence detector.
 
-8.4.1 The inactivity detector watches all output from the process. It watches the text output, the tool calls, and the movement of tokens. Output of any kind on any channel is activity.
+8.4.1 The silence detector watches all output from the process, not only the spoken reply. It watches the text output, the tool calls, and the movement of tokens. Output of any kind on any channel is activity.
 
-8.4.2 The detector starts its timer only when all activity stops at the same time. Activity resets the timer.
+8.4.2 The detector starts its timer only when all output stops at the same time. A process that is busy on a hard task still sends output, so the timer does not start. Activity resets the timer.
 
-8.4.3 The default inactivity time is one minute. If the process gives no activity for one minute, the bridge restarts the process.
+8.4.3 The default silence time is one minute. If the process sends nothing on any channel for one minute, the bridge restarts the process.
 
-8.4.4 A turn has no maximum length. A turn that continues to give activity continues to run. Only the absence of activity ends a turn by force.
-
-8.4.5 The inactivity time is a setting.
+8.4.4 The silence time is a setting.
 
 8.5 The compaction-loop detector.
 
@@ -149,11 +147,17 @@ project bridge stays in place.
 
 8.5.2 The detector counts the compaction messages. If the count is more than the limit within the window, the bridge treats this as a definite fault. The default limit is three messages in five minutes.
 
-8.5.3 The bridge acts on this fault at once. The bridge does not wait for the inactivity timer, because the process is still busy and the inactivity timer would never start.
+8.5.3 The bridge acts on this fault at once. The bridge does not wait for the silence timer, because the process is still busy and the silence timer would never start.
 
-8.5.4 This detector is the only guard against a turn that is active and wrong at the same time, because 8.4.4 sets no maximum length. Keep this detector correct.
+8.6 The hard ceiling.
 
-8.6 A restart is safe because actions are atomic and the bridge commits before a risky step.
+8.6.1 The hard ceiling is a last-resort limit. If a turn runs past an absolute maximum time, the bridge restarts the process even if it is not sure there is a fault.
+
+8.6.2 A restart at the ceiling is safe because actions are atomic and the bridge commits before a risky step.
+
+8.6.3 The hard ceiling covers the fault that the first two detectors cannot see: a process that gives activity without end and is wrong at the same time. Such a process resets the silence timer forever and can do this without a compaction message.
+
+8.6.4 The ceiling time is a setting. The value is open (see 19.4).
 
 8.7 The process-memory recycle.
 
@@ -259,7 +263,7 @@ project bridge stays in place.
 
 13.4 The compaction-loop detector (8.5) also protects cost, because a compaction loop spends tokens fast.
 
-13.5 A turn has no maximum length (8.4.4). The usage warning and the compaction-loop detector are therefore the cost guards. There is no time guard.
+13.5 The hard ceiling (8.6) bounds the cost of one turn in the worst case.
 
 13.6 The local speech engine has no per-use cost.
 
@@ -341,7 +345,7 @@ project bridge stays in place.
 
 18.8 Test the wake word in live use. Do not test the wake word before the build. If "hey bridge" collides with normal conversation, change the setting in Section 21.
 
-## 19. RESOLVED POINTS
+## 19. POINT STATUS
 
 19.1 Muted command subset. Mute and unmute only. The set is a list in the settings, so Chris adds more later. See 9.5 and 9.6.
 
@@ -349,7 +353,7 @@ project bridge stays in place.
 
 19.3 Lock-screen controls. Deferred to the design of the app. See 17.5.
 
-19.4 Turn limit. One minute of no activity, not one minute of silence. A turn with activity has no limit. This replaces the earlier hard ceiling. See 8.4 and 8.5.4.
+19.4 Turn limit. Two separate limits, not one. The silence limit is one minute of no output on any channel; a busy turn does not trip it. The hard ceiling is a separate absolute limit on turn length. OPEN: the ceiling time, and whether the bridge restarts at the ceiling or asks Chris first. See 8.4 and 8.6.
 
 19.5 Text-to-speech voice. Take the first working local voice. Do not wait for a decision. The engine is replaceable and the voice is a setting. See 4.8.
 
@@ -369,7 +373,8 @@ project bridge stays in place.
 
 | Setting | Default | Section |
 | --- | --- | --- |
-| Inactivity time before a restart | 1 minute | 8.4.3 |
+| Silence time before a restart | 1 minute | 8.4.3 |
+| Hard ceiling for a turn | to set, see 19.4 | 8.6.4 |
 | Compaction-loop limit | 3 messages | 8.5.2 |
 | Compaction-loop window | 5 minutes | 8.5.2 |
 | Process-memory recycle limit | 4 gigabytes | 8.7.2 |
