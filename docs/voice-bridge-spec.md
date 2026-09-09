@@ -65,13 +65,17 @@ project bridge stays in place.
 
 4.4 LiveKit has a native Android SDK. The same transport, the same framework, and the same echo cancellation carry over from the web client to the Android app. The bridge does not change when the client changes.
 
-4.5 The speech engine is fully local on the desktop machine by default. Speech does not go to a cloud service. This removes the per-use cost, keeps the audio private, and removes a network hop that a car connection would make slow.
+4.5 The speech engine is fully local on the desktop machine. This is not a default. This is a constraint. No part of the voice path goes to a cloud service, in any mode, at any time. Speech-to-text is local. Text-to-speech is local. Wake-word matching is local. This removes the per-use cost, keeps the audio private, and removes a network hop that a car connection would make slow.
 
 4.6 Speech-to-text uses a small Whisper-family model. This uses about two gigabytes of video memory and transcribes faster than real time.
 
 4.7 Text-to-speech uses a quality local neural voice. The machine has an eight-gigabyte GPU. The speech-to-text and the text-to-speech both fit on this GPU and leave headroom. The machine is idle when Chris is out, so the GPU is free.
 
-4.8 The speech-to-text engine and the text-to-speech engine are both replaceable parts. Each engine sits behind an interface. The builder selects the first working local voice and does not wait for a decision. Chris changes the voice later with a setting. The interface also accepts a cloud voice, but a cloud voice is not the default, because a cloud voice loses the properties of 4.5.
+4.8 The speech-to-text engine and the text-to-speech engine are both replaceable parts. Each engine sits behind an interface. The interface accepts local engines only. Do not add a cloud engine, and do not add a cloud fallback for a local engine that fails or gives a bad result.
+
+4.9 The builder selects the first working local voice and does not wait for a decision. Chris changes the voice later with a setting.
+
+4.10 The local-only constraint of 4.5 makes the GPU a hard dependency of the product. If the GPU is busy with other work, the voice quality and the speed get worse, and there is no other path. Watch this during the measurements of Section 18.
 
 ## 5. SIGNAL CHAIN
 
@@ -355,7 +359,7 @@ project bridge stays in place.
 
 19.4 Turn limit. Two separate limits, not one. The silence limit is one minute of no output on any channel; a busy turn does not trip it. The hard ceiling is a separate absolute limit on turn length. OPEN: the ceiling time, and whether the bridge restarts at the ceiling or asks Chris first. See 8.4 and 8.6.
 
-19.5 Text-to-speech voice. Take the first working local voice. Do not wait for a decision. The engine is replaceable and the voice is a setting. See 4.8.
+19.5 Text-to-speech voice. Take the first working local voice. Do not wait for a decision. The engine is replaceable and the voice is a setting, but each replacement is also local: the voice path is local only, with no cloud engine and no cloud fallback. See 4.5 and 4.8.
 
 19.6 Wake word. "hey bridge". Test it in live use, not in a separate test before the build. See 18.8.
 
@@ -387,8 +391,8 @@ project bridge stays in place.
 | End-of-turn pause | to set at 18.2 | 11.5 |
 | Usage warning level | to set at 7.3 | 13.2 |
 | Audio cue delay | to set at 7.3 | 15.5 |
-| Speech-to-text engine and model | small Whisper-family, local | 4.6 |
-| Text-to-speech engine and voice | first working local voice | 4.8 |
+| Speech-to-text engine and model | small Whisper-family, local only | 4.6 |
+| Text-to-speech engine and voice | first working local voice, local only | 4.9 |
 | Project directory list | none, any directory | 6.1 |
 
 21.3 A setting with the value "to set at" gets its first value at the build step named. The builder does not wait for this value before that step.
