@@ -5,7 +5,9 @@ your own machine. Claude Code does the reasoning; the bridge owns every voice
 decision and does speech locally.
 
 The full specification is [`docs/voice-bridge-spec.md`](docs/voice-bridge-spec.md).
-Section numbers in the source refer to it.
+Section numbers in the source refer to it. Picking this up after a break:
+[`docs/next.md`](docs/next.md) says how far it got, and which parts look
+finished but are not verified.
 
 > The manifest-to-MCP **project bridge** that used to live here is on the
 > `project-bridge` branch. It still runs the story pipeline; nothing about it
