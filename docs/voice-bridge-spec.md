@@ -41,7 +41,15 @@ project bridge stays in place.
 
 2.6 Decision three: the product is not tied to one project. The project bridge is generic in its mechanism, but it needs a hand-written verb list for each project, and it cannot help a project that has no command-line tool. One bridge that starts Claude Code in any directory is the better answer. This bridge needs nothing for each project, because the instructions file of each project already holds its rules.
 
-2.7 The existing project bridge stays in place. Nothing is deleted. The existing bridge continues to work for the story pipeline while the general bridge is built.
+2.7 The general bridge takes the repository of the project bridge. Chris decided this on 9 September 2026, against the earlier rule in this paragraph. The project bridge is not deleted: it stays on the `project-bridge` branch and continues to work for the story pipeline.
+
+2.8 The story pipeline moves to the general bridge later. The pipeline has a command-line tool, and 6.1 says the bridge starts Claude Code in the project directory, so the pipeline needs no verb list. Three points need an answer first, and 2.8.1 is the only one that needs code.
+
+2.8.1 A pipeline step takes minutes. A tool call that runs for minutes emits nothing on any channel, so the silence detector of 8.4 would restart the process in the middle of one. See 8.4.5.
+
+2.8.2 The pipeline reads a candidate aloud in full and does not summarize it. The voice instruction of 6.6 says the opposite, and 6.1 gives a project no way to say otherwise. A project needs a seam for this. OPEN.
+
+2.8.3 Work in flight must survive a restart. The agent asks the command-line tool what is in flight; the agent does not hold this in its context.
 
 ## 3. SYSTEM PARTS
 
@@ -149,6 +157,10 @@ project bridge stays in place.
 
 8.4.4 The silence time is a setting.
 
+8.4.5 A tool call that is in flight is activity, for the whole time it runs. A command that takes minutes sends nothing on any channel while it runs, so without this rule it cannot be told from a process that stopped. The bridge holds the silence timer from the start of a tool call to its end.
+
+8.4.6 The silence detector is checked before the ceiling of 8.6. A process can be silent and past the ceiling at the same time. Silence means the process is dead, and a dead process cannot answer a checkpoint, so the ladder of 8.6 would only delay the restart by the checkpoint window and the grace time.
+
 8.5 The compaction-loop detector.
 
 8.5.1 Claude Code prints a message when it compacts the conversation. In a healthy session this happens rarely. In a fault it happens again and again in a short time.
@@ -191,7 +203,7 @@ project bridge stays in place.
 
 8.8 The bridge lets Chris clear the context with a spoken command.
 
-8.9 The bridge cannot read the remaining context from Claude Code, because Claude Code does not expose this number (see Section 16). The bridge makes a cheap best-guess estimate instead. The bridge counts the tokens it sends and watches for the compaction message. The bridge gives a soft warning when the estimate gets high and a definite warning when it sees a compaction.
+8.9 The bridge reads the context from Claude Code. This replaces the estimate of the earlier revisions, which 16.2 no longer supports. Claude Code sends an `autocompact_state` event with the window size and the compaction threshold, and the result of each turn carries the token counts. The bridge divides the counts by the threshold. The bridge gives a soft warning when the number gets high and a definite warning when it sees a compaction.
 
 8.10 The bridge lets Chris select the model with a spoken command.
 
@@ -279,7 +291,7 @@ project bridge stays in place.
 
 13.1 A warm session can spend tokens quickly.
 
-13.2 The bridge gives a spoken warning about usage. The warning level is a setting.
+13.2 The bridge gives a spoken warning about usage. The warning level is a setting. The number is the reported one, not an estimate (see 16.6).
 
 13.3 Chris can ask for the usage with a spoken command.
 
@@ -325,7 +337,11 @@ project bridge stays in place.
 
 16.1 Other projects do voice for the Claude command-line tool. The nearest is claude-voice, which does speech-to-text, then the Claude command-line tool, then text-to-speech, with barge-in and a phone client. The telephony project claude-phone is the call-based method that this product does not use. Other projects are Happy Coder, Paseo, VoiceMode, and Voicebox. Learn from these projects. Read their code for the plumbing. Do not adopt one as the product. None of them do the gating, the wake commands, the car resilience, or the aleph memory split that this product needs.
 
-16.2 Claude Code does not expose the remaining context to any outside tool. The bridge cannot read this number. This is the reason for the best-guess estimate in 8.9.
+16.2 Claude Code does expose the context to an outside tool, measured against version 2.1.267. The `autocompact_state` event gives the window size and the compaction threshold, and the result of each turn gives the input, output, cache-read and cache-creation tokens. The earlier revisions of this document said the opposite and called for an estimate. The estimate is not needed. Confirm this again after a Claude Code upgrade, because it is not a promised interface.
+
+16.6 Claude Code also reports the rate-limit use directly, in a `rate_limit_event` with the five-hour and seven-day numbers. The usage command of 9.4.4 and the warning of 13.2 read these numbers. They do not estimate.
+
+16.7 Claude Code refuses `--output-format stream-json` unless `--verbose` is also given.
 
 16.3 Auto-compaction can thrash. The context can refill at once after a compaction, and the loop repeats. This is the reason for the compaction-loop detector in 8.5.
 
@@ -403,6 +419,7 @@ project bridge stays in place.
 | Compaction-loop window | 5 minutes | 8.5.2 |
 | Process-memory recycle limit | 4 gigabytes | 8.7.2 |
 | Context warning level | soft, then on compaction | 8.9 |
+| Claude Code command and flags | `claude -p --verbose`, stream-json both ways | 16.7 |
 | Model | Sonnet | 8.11 |
 | Wake word | "hey bridge" | 9.2 |
 | Commands that work when muted | mute, unmute | 9.5 |
