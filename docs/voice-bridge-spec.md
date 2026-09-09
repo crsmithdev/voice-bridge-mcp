@@ -75,7 +75,11 @@ project bridge stays in place.
 
 4.9 The builder selects the first working local voice and does not wait for a decision. Chris changes the voice later with a setting.
 
-4.10 The local-only constraint of 4.5 makes the GPU a hard dependency of the product. If the GPU is busy with other work, the voice quality and the speed get worse, and there is no other path. Watch this during the measurements of Section 18.
+4.10 The GPU budget for the voice path is eight gigabytes. This is the whole GPU. The speech-to-text model and the text-to-speech model must fit together in this budget and leave headroom. Select each model against this budget.
+
+4.11 The machine does no other GPU work while the bridge runs. The GPU is therefore not shared, and contention is not a risk of this design.
+
+4.12 The local-only constraint of 4.5 makes the GPU a hard dependency, and 4.11 is the condition that makes this safe. If the machine later does other GPU work, there is no cloud path to fall back on, and the models of 4.6 and 4.9 must get smaller instead.
 
 ## 5. SIGNAL CHAIN
 
@@ -391,6 +395,7 @@ project bridge stays in place.
 | End-of-turn pause | to set at 18.2 | 11.5 |
 | Usage warning level | to set at 7.3 | 13.2 |
 | Audio cue delay | to set at 7.3 | 15.5 |
+| GPU budget for the voice path | 8 gigabytes, the whole GPU | 4.10 |
 | Speech-to-text engine and model | small Whisper-family, local only | 4.6 |
 | Text-to-speech engine and voice | first working local voice, local only | 4.9 |
 | Project directory list | none, any directory | 6.1 |
