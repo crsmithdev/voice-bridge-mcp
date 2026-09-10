@@ -9,6 +9,12 @@
  *   bun scripts/fake-phone.ts "what is two plus two" "say the word done"
  *   bun scripts/fake-phone.ts --dir ~/some-project "summarise the readme"
  *   bun scripts/fake-phone.ts --barge 4000 "list twenty primes" "stop, different question"
+ *   bun scripts/fake-phone.ts "run something slow" "+30s:continue"
+ *
+ * A line may say when it is spoken: "+30s:continue" waits thirty seconds after
+ * the line before it, rather than waiting for the bridge to finish. Some things
+ * only happen on a clock — the checkpoint of 8.6.3 is one — and a script that
+ * waits for quiet arrives before them and is answered as ordinary speech.
  *   bun scripts/fake-phone.ts --attach https://host:3100#amber-cedar-tide "hello"
  *
  * It starts a bridge of its own, on a free port and in a room of its own, and
@@ -162,7 +168,26 @@ async function say(text: string): Promise<void> {
 }
 
 const measurements: string[] = [];
-for (const [n, line] of options.lines.entries()) {
+for (const [n, raw] of options.lines.entries()) {
+  const timed = /^\+(\d+)(ms|s):(.*)$/s.exec(raw);
+  const line = timed ? (timed[3] as string) : raw;
+  if (timed) {
+    const delay = Number(timed[1]) * (timed[2] === "s" ? 1000 : 1);
+    console.log(`${at()} waiting ${(delay / 1000).toFixed(0)}s before speaking`);
+    await Bun.sleep(delay);
+    const startedAt = Date.now();
+    speakingSince = 0;
+    await say(line);
+    const deadline = Date.now() + options.quietMs;
+    while (Date.now() < deadline) {
+      await Bun.sleep(250);
+      if (speakingSince && Date.now() - lastAudioAt > 2_000) break;
+    }
+    measurements.push(speakingSince
+      ? `line ${n + 1}: first audio ${((speakingSince - startedAt) / 1000).toFixed(1)}s after it was said`
+      : `line ${n + 1}: the bridge said nothing`);
+    continue;
+  }
   const bargeIn = options.bargeMs > 0 && n > 0;
   if (!bargeIn) {
     speakingSince = 0;

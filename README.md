@@ -147,7 +147,12 @@ back, so a spoken conversation can be scripted and read.
 bun scripts/fake-phone.ts "what is two plus two" "say the word done"
 bun scripts/fake-phone.ts --dir ~/some-project "summarise the readme"
 bun scripts/fake-phone.ts --barge 6000 "list twenty primes" "stop, different question"
+bun scripts/fake-phone.ts "run something slow" "+30s:continue"
 ```
+
+A line may say when it is spoken. Some things only happen on a clock — the
+checkpoint of 8.6.3 is one — and a script that waits for the bridge to finish
+arrives before them and is answered as ordinary speech.
 
 It starts a bridge of its own, on a free port and in a room of its own, and
 stops it at the end. That is not tidiness: there is one long-lived room in
