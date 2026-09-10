@@ -425,14 +425,20 @@ project bridge stays in place.
 | Commands that work when muted | mute, unmute | 9.5 |
 | Agreement word | "continue" | 10.2 |
 | Gated action list | to set at 7.2 | 10.1 |
-| End-of-turn pause | to set at 18.2 | 11.5 |
-| Usage warning level | to set at 7.3 | 13.2 |
-| Audio cue delay | to set at 7.3 | 15.5 |
+| End-of-turn pause | 1.5 seconds | 11.5 |
+| Usage warning level | 80 percent of the reported rate limit | 13.2 |
+| Audio cue delay | 4 seconds, then every 6 seconds | 15.5 |
 | GPU budget for the voice path | 8 gigabytes, the whole GPU | 4.10 |
-| Speech-to-text engine and model | small Whisper-family, local only | 4.6 |
-| Text-to-speech engine and voice | first working local voice, local only | 4.9 |
+| Speech-to-text engine and model | faster-whisper, `small.en`, local only | 4.6 |
+| Text-to-speech engine and voice | piper, `en_US-lessac-medium`, local only | 4.9 |
 | Project directory list | none, any directory | 6.1 |
+| Wake word forms the engine also writes | "cambridge" | 9.3 |
+| Speech onset before recording starts | 50 milliseconds | 11.5 |
+| Level that counts as speech | 2 percent | 11.5 |
+| Settle time before listening again | 300 milliseconds | 11.2 |
+| Longest run of text spoken as one piece | 240 characters | 5.6 |
+| Narration delay | 5 seconds | 2.3 |
 
-21.3 A setting with the value "to set at" gets its first value at the build step named. The builder does not wait for this value before that step.
+21.3 A setting with the value "to set at" gets its first value at the build step named. The builder does not wait for this value before that step. The three such settings got their first values at 7.3.
 
 21.4 A new setting follows the same rule. A value that a builder wants to change during a test is a setting, not a constant.

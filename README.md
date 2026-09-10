@@ -21,14 +21,23 @@ Build order is spec section 7. Done so far:
 |---|---|
 | 7.1 narration hook | removed from the spec; the bridge narrates from the stream |
 | 7.2 text round trip | **here**, `bun src/main.ts chat <dir>` |
-| 7.3 voice | not started |
+| 7.3 voice | **here**, `bun src/main.ts voice <dir>` |
 | 7.4 web client | not started |
 | 7.5 Android app | not started |
 
 ```bash
 bun install
 bun src/main.ts chat ~/some-project    # a spoken conversation, typed
+bun src/main.ts voice ~/some-project   # a spoken conversation, spoken
 bun src/main.ts config                 # every setting, and which are not default
+```
+
+Voice needs the two local engines once:
+
+```bash
+uv venv .venv
+uv pip install --python .venv/bin/python faster-whisper piper-tts nvidia-cublas-cu12 nvidia-cudnn-cu12
+.venv/bin/python -m piper.download_voices --download-dir ~/.voice-bridge/models en_US-lessac-medium
 ```
 
 The text loop is useful on its own, and it is where the process management gets
@@ -43,6 +52,11 @@ same hook that will feed the sentence collector when voice arrives.
 | `src/protocol.ts` | Claude Code's stream-json output, reduced to what the bridge acts on |
 | `src/supervisor.ts` | the three fault detectors of section 8, as a clock-driven state machine |
 | `src/narrator.ts` | what the bridge says while a tool runs, so a long turn is not silence |
+| `src/speech.ts` | section 4: the two local engines, each behind the interface of 4.8 |
+| `src/sentences.ts` | section 5.6: the streamed reply cut at sentence ends |
+| `src/commands.ts` | section 9: the wake word, matched by sound rather than spelling |
+| `src/cues.ts` | section 15: a soft tone, so a wait is never plain silence |
+| `speech/*.py` | the two engines as long-lived workers, warmed at startup |
 | `src/session.ts` | one long-lived Claude Code process, text in and text out |
 | `src/main.ts` | the text loop |
 
@@ -71,6 +85,30 @@ A fourth guard is not a fault detector. The **memory recycle** (8.7) samples the
 resident size of the process on the same tick and recycles it past four
 gigabytes, always between turns, never mid-answer. A healthy claude sits near
 290 MB.
+
+## Voice
+
+Everything in the voice path is local, and 4.5 makes that a constraint rather
+than a default: there is no cloud engine behind the interface of 4.8 and no
+fallback to one. Speech to text is faster-whisper with `small.en` on the GPU,
+about 657 MiB and 27 times real time. Text to speech is piper on the CPU, about
+a tenth of a second a sentence. Both run as long-lived workers, because both
+cost seconds to load and the bridge pays that at startup instead of on the
+first thing you say.
+
+The reply is cut at sentence ends and spoken sentence by sentence while the
+model still writes the rest, so the time to first audio is the time to the
+first sentence — 2.3 to 2.7 seconds measured at the desk.
+
+Say "hey bridge" and then a command: mute, unmute, clear the context, report
+the usage, say that again, summarize, report where we are, end the turn. The
+wake word is matched by sound, not spelling, because an engine writes the same
+sound several ways.
+
+Barge-in is not here. 11.4 says double-talk needs the echo cancellation of a
+proven framework, so it waits for LiveKit at 7.4. Until then the bridge listens
+through a turn but not through its own voice, and drops any recording that
+overlapped one.
 
 ## Settings
 

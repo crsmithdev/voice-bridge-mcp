@@ -11,13 +11,13 @@ Build order is spec section 7.
 | Step | State |
 |---|---|
 | 7.1 narration hook | removed from the spec. The bridge narrates instead |
-| 7.2 text round trip | done here, branch `voice-bridge` |
-| 7.3 voice | not started — this is next |
+| 7.2 text round trip | done, on `main` |
+| 7.3 voice | done except barge-in, which waits for 7.4 |
 | 7.4 web client | not started |
 | 7.5 Android app | not started |
 
-Not merged to `main`. The project bridge that used to be in this repository is
-on `project-bridge` and still runs the story pipeline.
+7.2 is on `main`; 7.3 is on `feature/voice`. The project bridge that used to be
+in this repository is on `project-bridge` and still runs the story pipeline.
 
 ## Corrections to the previous revision of this file
 
@@ -138,6 +138,68 @@ deltas, then whole in the `assistant` message that follows. Only the whole
 message becomes a `text` event and accumulates into the reply, so the two do
 not add up. Anything new that reads `delta` must not also read `text`.
 
+## 7.3, what works and what does not
+
+Everything in the voice path is local, and no part of it reaches a network.
+Speech to text is faster-whisper with `small.en` on the GPU; text to speech is
+piper with `en_US-lessac-medium` on the CPU. Both run as long-lived workers
+under `speech/`, warmed at startup.
+
+Verified by driving the real loop with real audio, by making the bridge's own
+speaker its microphone:
+
+| | |
+|---|---|
+| a spoken question, answered aloud | yes |
+| 6.6, a question about code | came back summarized, no path, no code, no markdown |
+| 9.4, the commands | mute, unmute, usage, restate, where, all by voice |
+| 9.5, muted | the next question was heard and ignored |
+| 8.6.3 and 8.6.4 | the checkpoint spoke the elapsed time and the cost, "continue" extended the turn, and the ladder asked again |
+| 9.4.8 | "hey bridge, end the turn" stopped a running tool call |
+| 2.3 | the narration says what a long tool call is doing |
+
+Measured on an RTX 5070 and claude 2.1.267:
+
+| | |
+|---|---|
+| engines warm | 1.2 to 2.0 seconds, once, at startup |
+| whisper | 0.20 s for 5.56 s of audio, 27 times real time, about 657 MiB |
+| whisper, first call on a cold GPU | 7.4 seconds, which is why the warmup exists |
+| piper | about 0.1 second a sentence, 20 times real time |
+| time to first audio | 2.3 to 2.7 seconds |
+
+**Barge-in is not built.** 11.1 to 11.3 want the microphone open while the
+bridge speaks. Without echo cancellation the bridge transcribes its own voice
+and answers it, so every sound the bridge makes stops the microphone first, and
+the recording it cut is thrown away. The result is that Chris can interrupt a
+turn while the bridge is thinking but not while it is talking. 11.4 says
+double-talk needs a proven framework rather than a hand-built canceller, so
+this waits for LiveKit at 7.4 and is not worth attacking before then.
+
+## What the voice path taught
+
+Four things that only appear when real audio goes through:
+
+1. **Whisper writes words for silence.** A recording of room noise came back as
+   "you" and the bridge sent it to the agent and paid for a turn. `vad_filter`
+   fixes it: silence now transcribes as nothing.
+2. **A recording must be cut, not discarded.** The first attempt let a recording
+   run through the bridge's own speech and threw the whole thing away as
+   self-heard. The checkpoint therefore asked for the agreement word and could
+   never hear the answer, because the answer was inside the discarded recording.
+   The microphone now stops the moment the bridge speaks and reopens after.
+3. **A cue must not take the microphone.** When it did, a cue every seven
+   seconds shredded every listening window. A cue is a tone: the voice detector
+   drops it and nothing can transcribe it as words, so it is allowed to sit
+   inside a recording. Only the voice has to cut one.
+4. **"hey bridge" does not survive the engine.** `small.en` writes it as
+   "Cambridge" about half the time, and sometimes drops the "hey" and leaves
+   "bridge". 9.3 says the bridge accepts the forms the engine produces, so
+   "cambridge" is now one, and the form list is a setting. Bare "bridge" is
+   deliberately not accepted: Chris says "the bridge" constantly about this
+   project. 18.8 says to settle the wake word by use, and the honest reading of
+   this evidence is that "hey bridge" is a poor choice of wake word.
+
 ## Open decisions
 
 Section 19 is closed except for one thing that moved into 2.8.2:
@@ -155,11 +217,11 @@ The context reading depends on Claude Code emitting `autocompact_state`. It did
 not emit one here (see correction 2), and none of it is a promised interface.
 `--output-format stream-json` is still refused without `--verbose` (16.7).
 
-## Settings added
+## Settings
 
-`narrationDelayMs`, default 5 seconds: how long a tool call must run before the
-bridge says what it is. 21.4 says a value a builder wants to change during a
-test is a setting, so it is one. It is not in the spec's section 21 table.
+Section 21 of the spec now holds every setting, including the three that said
+"to set at" and got their first values at 7.3: the end-of-turn pause, the usage
+warning level and the audio cue delay.
 
 ## Measurements
 

@@ -25,12 +25,38 @@ export interface Config {
   model: string;
   /** 9.2 matched by sound, not spelling (9.3) */
   wakeWord: string;
+  /** 9.3 the other things the engine writes when it hears the wake word (18.8) */
+  wakeWordVariants: string[];
   /** 9.5 the only two commands that work while muted; a list so it can grow (9.6) */
   mutedCommands: string[];
   /** 10.2 a specific word, never "yes" */
   agreementWord: string;
   /** 2.3 how long a tool call must run before the bridge says what it is */
   narrationDelayMs: number;
+  /** 4.5 the whole voice path is local; these name local engines only (4.8) */
+  pythonBin: string;
+  modelsDir: string;
+  /** 4.6 a small Whisper-family model */
+  sttModel: string;
+  /** 4.9 the first working local voice, and a setting from then on */
+  ttsVoice: string;
+  /** 5.6 a run of text this long with no punctuation is spoken anyway */
+  sentenceMaxChars: number;
+  /** 11.5 the pause that ends a turn, and the level that counts as speech */
+  endOfTurnPauseMs: number;
+  silenceThreshold: string;
+  /** how long the level must stay up before the bridge treats it as speech */
+  speechOnsetMs: number;
+  /** how long to let the speakers drain before listening again, so the bridge does not hear itself */
+  listenSettleMs: number;
+  /** 6.5 the voice instruction lives in the bridge, not in the aleph identity file */
+  voiceInstruction: string;
+  /** 15.5 how long a wait has to be before a cue is worth playing */
+  audioCueDelayMs: number;
+  /** 15.2 how often the cue repeats while the wait goes on */
+  audioCueEveryMs: number;
+  /** 13.2 the reported rate-limit use that earns a spoken warning */
+  usageWarnFraction: number;
   /** 6.1 the bridge starts Claude Code in the project directory */
   claudeBin: string;
   claudeArgs: string[];
@@ -46,9 +72,30 @@ export const DEFAULTS: Config = {
   graceMs: 30_000,
   model: "sonnet",
   wakeWord: "hey bridge",
+  // small.en writes "hey bridge" as "Cambridge" about half the time. 9.3 says
+  // the bridge accepts the forms the engine produces; 18.8 says find them by use.
+  wakeWordVariants: ["cambridge"],
   mutedCommands: ["mute", "unmute"],
   agreementWord: "continue",
   narrationDelayMs: 5_000,
+  pythonBin: new URL("../.venv/bin/python", import.meta.url).pathname,
+  modelsDir: join(homedir(), ".voice-bridge", "models"),
+  sttModel: "small.en",
+  ttsVoice: "en_US-lessac-medium",
+  sentenceMaxChars: 240,
+  endOfTurnPauseMs: 1_500,
+  silenceThreshold: "2%",
+  speechOnsetMs: 50,
+  listenSettleMs: 300,
+  // 6.6 a spoken conversation: summarize, and never read a path, a diff, code or a secret aloud
+  voiceInstruction: [
+    "You are in a spoken conversation. A text to speech engine reads your reply aloud.",
+    "Do not read file paths, diffs, code or secrets aloud. Summarize them instead.",
+    "Answer in short plain sentences. Do not use markdown, lists, headers or code blocks.",
+  ].join(" "),
+  audioCueDelayMs: 4_000,
+  audioCueEveryMs: 6_000,
+  usageWarnFraction: 0.8,
   claudeBin: "claude",
   // --verbose is not optional: claude refuses stream-json output without it
   claudeArgs: ["-p", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages"],
