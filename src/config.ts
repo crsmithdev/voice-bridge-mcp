@@ -45,6 +45,8 @@ export interface Config {
   /** 11.5 the pause that ends a turn, and the level that counts as speech */
   endOfTurnPauseMs: number;
   silenceThreshold: string;
+  /** the same level as a fraction, for the transports that count samples themselves */
+  speechLevel: number;
   /** how long the level must stay up before the bridge treats it as speech */
   speechOnsetMs: number;
   /** how long to let the speakers drain before listening again, so the bridge does not hear itself */
@@ -57,6 +59,31 @@ export interface Config {
   audioCueEveryMs: number;
   /** 13.2 the reported rate-limit use that earns a spoken warning */
   usageWarnFraction: number;
+  /** 4.1 the transport. Empty keys mean the pair in ~/.voice-bridge/keys.json. */
+  livekitUrl: string;
+  livekitApiKey: string;
+  livekitApiSecret: string;
+  livekitPort: number;
+  /** the address the phone uses. Empty means the tailnet address, else this machine's. */
+  advertiseHost: string;
+  /**
+   * 12.1 A browser gives no microphone to a page that is not a secure context,
+   * and only loopback is exempt. A phone therefore needs https, and an https
+   * page may only open a wss socket. Either terminate TLS in front of the
+   * bridge and set these two, or give the bridge a certificate below.
+   */
+  publicOrigin: string;
+  livekitPublicUrl: string;
+  tlsCert: string;
+  tlsKey: string;
+  /** 12.1 the port the bridge serves the client and the pairing on */
+  servePort: number;
+  /** the room the bridge and the phone meet in */
+  room: string;
+  /** 12.2 how long the token the client keeps stays good */
+  tokenDays: number;
+  /** 14.8 how far back "the turns it missed" reaches. A drop in a tunnel is minutes. */
+  historyMaxAgeMs: number;
   /** 6.1 the bridge starts Claude Code in the project directory */
   claudeBin: string;
   claudeArgs: string[];
@@ -85,6 +112,7 @@ export const DEFAULTS: Config = {
   sentenceMaxChars: 240,
   endOfTurnPauseMs: 1_500,
   silenceThreshold: "2%",
+  speechLevel: 0.02,
   speechOnsetMs: 50,
   listenSettleMs: 300,
   // 6.6 a spoken conversation: summarize, and never read a path, a diff, code or a secret aloud
@@ -96,6 +124,19 @@ export const DEFAULTS: Config = {
   audioCueDelayMs: 4_000,
   audioCueEveryMs: 6_000,
   usageWarnFraction: 0.8,
+  livekitUrl: process.env.LIVEKIT_URL ?? "",
+  livekitApiKey: process.env.LIVEKIT_API_KEY ?? "",
+  livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "",
+  livekitPort: 7880,
+  advertiseHost: "",
+  publicOrigin: "",
+  livekitPublicUrl: "",
+  tlsCert: "",
+  tlsKey: "",
+  servePort: 3100,
+  room: "bridge",
+  tokenDays: 30,
+  historyMaxAgeMs: 900_000,
   claudeBin: "claude",
   // --verbose is not optional: claude refuses stream-json output without it
   claudeArgs: ["-p", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages"],

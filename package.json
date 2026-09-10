@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "bin": { "voice-bridge": "src/main.ts" },
+  "bin": {
+    "voice-bridge": "src/main.ts"
+  },
   "scripts": {
     "chat": "bun src/main.ts chat",
     "test": "bun test",
@@ -11,6 +13,12 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "playwright": "^1.63.0",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@livekit/rtc-node": "^0.13.35",
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.19.0"
   }
 }

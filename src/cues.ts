@@ -27,13 +27,21 @@ export class Cues {
     for (const [name, [first, second]] of Object.entries(NOTES) as Array<[CueName, [number, number]]>) {
       const wav = join(this.dir, `cue-${name}.wav`);
       const done = await Bun.spawn([
-        "sox", "-n", "-r", "22050", "-c", "1", wav,
+        // -b 16 -e signed-integer is not optional: sox writes 32-bit float by
+        // default, which plays locally and is refused by the wav reader that
+        // feeds the transport.
+        "sox", "-n", "-r", "22050", "-c", "1", "-b", "16", "-e", "signed-integer", wav,
         "synth", "0.16", "sine", String(first),
         ":", "synth", "0.20", "sine", String(second),
         "fade", "q", "0.03", "0", "0.08", "vol", "0.12",
       ], { stdout: "ignore", stderr: "ignore" }).exited;
       if (done === 0) this.files.set(name, wav);
     }
+  }
+
+  /** The file, for a transport that sends bytes rather than plays them. */
+  file(name: CueName): string | undefined {
+    return this.files.get(name);
   }
 
   async play(name: CueName): Promise<void> {

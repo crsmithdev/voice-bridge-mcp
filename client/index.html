@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Bridge</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e1113; --fg:#e8e6e3; --dim:#8a9199; --line:#22282c; --live:#4ec9a7; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,sans-serif;
+         min-height:100dvh; display:flex; flex-direction:column; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  header { display:flex; align-items:center; gap:10px; padding:14px 0; border-bottom:1px solid var(--line); }
+  #dot { width:10px; height:10px; border-radius:50%; background:#555; flex:none; }
+  #dot.on { background:var(--live); box-shadow:0 0 10px var(--live); }
+  #state { color:var(--dim); font-size:14px; }
+  main { flex:1; overflow-y:auto; padding:12px 0; display:flex; flex-direction:column; gap:10px; }
+  .line { max-width:90%; padding:9px 12px; border-radius:14px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .you { align-self:flex-end; background:#1d2a33; border-bottom-right-radius:4px; }
+  .bridge { align-self:flex-start; background:#171c20; border-bottom-left-radius:4px; }
+  .note { align-self:center; color:var(--dim); font-size:13px; background:none; padding:2px; }
+  footer { border-top:1px solid var(--line); padding:12px 0; display:flex; gap:8px; }
+  input, button { font:inherit; border-radius:10px; border:1px solid var(--line); padding:11px 13px; }
+  input { flex:1; min-width:0; background:#12171a; color:var(--fg); }
+  button { background:#1d2a33; color:var(--fg); cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #pair { margin:auto; text-align:center; max-width:340px; }
+  #pair p { color:var(--dim); font-size:14px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header><span id="dot"></span><strong>Voice Bridge</strong><span id="state">not connected</span></header>
+
+<section id="pair">
+  <h2>Pair this phone</h2>
+  <p>The bridge printed a three-word code when it started. It is asked once; this phone remembers it after that.</p>
+  <footer style="border:0">
+    <input id="code" placeholder="amber-cedar-tide" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <button id="go">Pair</button>
+  </footer>
+  <p id="pairError" style="color:#e0796b"></p>
+</section>
+
+<main id="log" class="hidden"></main>
+<footer id="bar" class="hidden">
+  <input id="say" placeholder="or type it" autocomplete="off">
+  <button id="send">Send</button>
+  <button id="stop" title="end the turn">Stop</button>
+</footer>
+
+<script type="module">
+import { Room, RoomEvent, Track } from "/livekit-client.mjs";
+
+const $ = (id) => document.getElementById(id);
+const log = $("log"), state = $("state"), dot = $("dot");
+const KEY = "voice-bridge-credentials";
+
+function line(text, kind) {
+  const el = document.createElement("div");
+  el.className = `line ${kind}`;
+  el.textContent = text;
+  log.append(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+$("go").onclick = async () => {
+  const code = $("code").value.trim();
+  if (!code) return;
+  $("go").disabled = true;
+  try {
+    const response = await fetch("/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) });
+    if (!response.ok) throw new Error((await response.json()).error ?? "pairing failed");
+    const credentials = await response.json();
+    // 12.2 kept, so 12.4 does not ask again
+    localStorage.setItem(KEY, JSON.stringify(credentials));
+    await connect(credentials);
+  } catch (error) {
+    $("pairError").textContent = error.message;
+    $("go").disabled = false;
+  }
+};
+
+async function connect({ url, token }) {
+  $("pair").classList.add("hidden");
+  log.classList.remove("hidden");
+  $("bar").classList.remove("hidden");
+  state.textContent = "connecting";
+
+  // 4.2 the echo cancellation is the framework's, not ours. It is what lets the
+  // microphone stay open while the bridge speaks, which is 11.1 to 11.3.
+  const room = new Room({
+    adaptiveStream: true,
+    audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+
+  room.on(RoomEvent.Connected, () => { state.textContent = "listening"; dot.classList.add("on"); });
+  room.on(RoomEvent.Disconnected, () => { state.textContent = "disconnected"; dot.classList.remove("on"); });
+  // 14.2 LiveKit reconnects the transport; the bridge keeps the session behind it
+  room.on(RoomEvent.Reconnecting, () => { state.textContent = "reconnecting"; dot.classList.remove("on"); });
+  room.on(RoomEvent.Reconnected, () => { state.textContent = "listening"; dot.classList.add("on"); });
+
+  room.on(RoomEvent.TrackSubscribed, (track) => {
+    if (track.kind !== Track.Kind.Audio) return;
+    const element = track.attach();
+    element.autoplay = true;
+    document.body.append(element);
+  });
+
+  // 4.3 the control channel, and 14.7 the light transcript that is also the audit trail
+  room.on(RoomEvent.DataReceived, (payload) => {
+    let message;
+    try { message = JSON.parse(new TextDecoder().decode(payload)); } catch { return; }
+    // 14.8 the turns that happened while this client was away
+    if (message.kind === "history") {
+      if (log.dataset.filled) return;
+      log.dataset.filled = "1";
+      const turns = message.turns ?? [];
+      if (turns.length === 0) return;
+      // say plainly that this is older, or it reads as the conversation in progress
+      line("earlier", "note");
+      for (const past of turns) {
+        if (past.kind === "heard") line(past.text, "you");
+        else if (past.kind === "turn") line(past.text, "bridge");
+      }
+      line("now", "note");
+      return;
+    }
+    if (message.kind === "heard") line(message.text, "you");
+    else if (message.kind === "turn") line(message.text, "bridge");
+    else if (message.kind === "narration") line(message.text, "note");
+    else if (message.kind === "error") line(message.text, "note");
+  });
+
+  await room.connect(url, token);
+  await room.localParticipant.setMicrophoneEnabled(true);
+  window.__room = room;
+}
+
+function tell(value) {
+  const room = window.__room;
+  if (!room) return;
+  room.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(value)), { reliable: true });
+}
+
+$("send").onclick = () => {
+  const text = $("say").value.trim();
+  if (!text) return;
+  $("say").value = "";
+  tell({ kind: "said", text });
+};
+$("say").addEventListener("keydown", (event) => { if (event.key === "Enter") $("send").click(); });
+// 9.4.8 by hand, for a car that is too loud to be heard in
+$("stop").onclick = () => tell({ kind: "said", text: "hey bridge end the turn" });
+
+const saved = localStorage.getItem(KEY);
+if (saved) connect(JSON.parse(saved)).catch(() => { localStorage.removeItem(KEY); location.reload(); });
+</script>
+</body>
+</html>
