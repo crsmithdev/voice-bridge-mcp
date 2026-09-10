@@ -23,6 +23,10 @@
   input { flex:1; min-width:0; background:#12171a; color:var(--fg); }
   button { background:#1d2a33; color:var(--fg); cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
+  /* big enough to hit in a car, without looking at it for long */
+  #sound { display:none; margin:0; padding:18px; border:0; border-radius:0; width:100%;
+           background:#7a3b2e; color:#fff; font-size:17px; font-weight:600; }
+  #sound.show { display:block; }
   #pair { margin:auto; text-align:center; max-width:340px; }
   #pair p { color:var(--dim); font-size:14px; }
   .hidden { display:none !important; }
@@ -41,6 +45,7 @@
   <p id="pairError" style="color:#e0796b"></p>
 </section>
 
+<button id="sound">Tap to hear the bridge</button>
 <main id="log" class="hidden"></main>
 <footer id="bar" class="hidden">
   <input id="say" placeholder="or type it" autocomplete="off">
@@ -54,6 +59,20 @@ import { Room, RoomEvent, Track } from "/livekit-client.mjs";
 const $ = (id) => document.getElementById(id);
 const log = $("log"), state = $("state"), dot = $("dot");
 const KEY = "voice-bridge-credentials";
+const sounds = [];
+
+function start(element) {
+  const played = element.play();
+  if (!played) return;
+  played.then(() => $("sound").classList.remove("show"))
+        .catch(() => $("sound").classList.add("show"));
+}
+
+// the tap the browser was waiting for
+$("sound").onclick = () => {
+  for (const element of sounds) start(element);
+  $("sound").classList.remove("show");
+};
 
 function line(text, kind) {
   const el = document.createElement("div");
@@ -103,7 +122,13 @@ async function connect({ url, token }) {
     if (track.kind !== Track.Kind.Audio) return;
     const element = track.attach();
     element.autoplay = true;
+    element.playsInline = true;
     document.body.append(element);
+    sounds.push(element);
+    // A phone that already has a token connects with no tap at all, and a
+    // browser refuses to make a sound it was not asked for. Nothing errors:
+    // the reply arrives, the transcript fills in, and the car stays silent.
+    start(element);
   });
 
   // 4.3 the control channel, and 14.7 the light transcript that is also the audit trail

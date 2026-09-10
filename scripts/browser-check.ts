@@ -15,6 +15,14 @@
 import { chromium } from "playwright";
 
 const [base, code, micWav] = process.argv.slice(2);
+
+// There is one long-lived room in normal use, and it is somebody's actual
+// conversation. A check that points at it joins that conversation, is given its
+// transcript, and speaks a test question into it. Point at a bridge of your own.
+if (!process.env.LIVE && /3100|lightbox2/.test(base ?? "")) {
+  console.error("that looks like the live bridge. Start one of your own, or set LIVE=1 to say you meant it.");
+  process.exit(2);
+}
 const browser = await chromium.launch({
   args: [
     "--use-fake-ui-for-media-stream",
