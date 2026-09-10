@@ -1,61 +1,99 @@
-# voice-bridge-mcp
+# voice-bridge
 
-A command-line tool, exposed to a claude.ai chat as a connector, so a voice
-conversation can drive it. Each project declares its tools in an `mcp.toml`;
-the bridge runs exactly those commands and returns what they print.
+Drive a Claude Code session by voice, from a phone, over a bridge that runs on
+your own machine. Claude Code does the reasoning; the bridge owns every voice
+decision and does speech locally.
 
-```
+The full specification is [`docs/voice-bridge-spec.md`](docs/voice-bridge-spec.md).
+Section numbers in the source refer to it. Picking this up after a break:
+[`docs/next.md`](docs/next.md) says how far it got, and which parts look
+finished but are not verified.
+
+> The manifest-to-MCP **project bridge** that used to live here is on the
+> `project-bridge` branch. It still runs the story pipeline; nothing about it
+> changed. `git checkout project-bridge` to get it back.
+
+## Where it is
+
+Build order is spec section 7. Done so far:
+
+| | |
+|---|---|
+| 7.1 narration hook | removed from the spec; the bridge narrates from the stream |
+| 7.2 text round trip | **here**, `bun src/main.ts chat <dir>` |
+| 7.3 voice | not started |
+| 7.4 web client | not started |
+| 7.5 Android app | not started |
+
+```bash
 bun install
-bun src/main.ts token                       # a token for projects.toml
-bun src/main.ts check ~/some-project        # validate its mcp.toml
-bun src/main.ts serve --port 3000           # http://127.0.0.1:3000/<project>/mcp/<token>
+bun src/main.ts chat ~/some-project    # a spoken conversation, typed
+bun src/main.ts config                 # every setting, and which are not default
 ```
 
-`~/.voice-bridge-mcp/projects.toml` names the projects:
+The text loop is useful on its own, and it is where the process management gets
+exercised before any audio exists. The reply streams word by word, through the
+same hook that will feed the sentence collector when voice arrives.
 
-```toml
-[fogbelt]
-dir = "~/fogbelt"
-token = "…"                # from `token`; the path segment is the only auth
-# env = { FOO = "bar" }    # added to the environment of every command
+## Layout
+
+| | |
+|---|---|
+| `src/config.ts` | section 21 entire: every default in the spec, as a setting |
+| `src/protocol.ts` | Claude Code's stream-json output, reduced to what the bridge acts on |
+| `src/supervisor.ts` | the three fault detectors of section 8, as a clock-driven state machine |
+| `src/narrator.ts` | what the bridge says while a tool runs, so a long turn is not silence |
+| `src/session.ts` | one long-lived Claude Code process, text in and text out |
+| `src/main.ts` | the text loop |
+
+## Process management
+
+A warm agent process is the thing most likely to break, so section 8 gives it
+three detectors that fail in different ways:
+
+- **Silence** (8.4). No output on any channel for a minute and the process is
+  dead. A tool call that is still running counts as activity, because a command
+  that takes minutes emits nothing while it runs and would otherwise look
+  exactly like a corpse.
+- **Compaction loop** (8.5). More than three compactions in five minutes is a
+  process that is busy but stuck, and the silence timer would never fire on it.
+- **Ceiling** (8.6). Ten minutes into one turn the bridge speaks, says how long
+  it has run and asks for the agreement word. Without one it interrupts the
+  turn and keeps the process, its context and the conversation. It restarts
+  only if the process does not come back within the grace time — the failed
+  interrupt is the evidence that a restart is warranted.
+
+Silence is checked before the ceiling: a dead process cannot answer a
+checkpoint, so asking one would only delay its restart by the window and the
+grace.
+
+A fourth guard is not a fault detector. The **memory recycle** (8.7) samples the
+resident size of the process on the same tick and recycles it past four
+gigabytes, always between turns, never mid-answer. A healthy claude sits near
+290 MB.
+
+## Settings
+
+No file is needed. To change one, write `~/.voice-bridge/config.json`
+(`$VOICE_BRIDGE_CONFIG` overrides) with just the fields you want:
+
+```json
+{ "model": "opus", "ceilingMs": 900000 }
 ```
 
-Put the bridge behind HTTPS (ngrok, Tailscale Funnel) and add
-`https://<host>/<project>/mcp/<token>` as a custom connector with no
-authentication.
+`bun src/main.ts config` prints the effective values and marks the ones you
+have set. A timer that is not a positive number, or an agreement word of
+"yes", is refused rather than quietly replaced — 10.3 exists so a reflex or a
+bad transcription cannot agree to something.
 
-## mcp.toml
+## Tests
 
-```toml
-description = "instructions the model reads before using the tools"
-
-[tools.status]
-description = "what the tool does"
-command = ["./fogbelt", "status"]   # argv, run in the project directory
-timeout = 120                       # seconds, immediate tools only
-
-[tools.draw]
-description = "start a draw"
-command = ["./fogbelt", "draw"]
-background = true                   # returns a job id at once
-
-[tools.draw.args.genre]             # a flag or a positional
-description = "horror or scifi"
-enum = ["horror", "scifi"]
-flag = "--genre"                    # `--genre horror`; a true boolean emits the bare flag
-
-[tools.gate.args.draw]
-position = 1                        # the nth positional after the command
-required = true
-[tools.gate.args.targets]
-position = 3
-variadic = true                     # a list, the last positional
-[tools.gate.args.verb]
-position = 2
-fixed = "choose"                    # always emitted, never shown to the model
+```bash
+bun test        # the parser against captured claude output, and the ladder against a fake clock
+bun run typecheck
 ```
 
-Argument `type` is `string` (default), `number`, or `boolean`. Every project
-also gets `job <id>` and `jobs`; background jobs persist under
-`~/.voice-bridge-mcp/jobs/<project>/` and survive a restart of the bridge.
-Output over 40,000 characters is cut from the head.
+The supervisor takes a clock, so the whole escalation is tested without
+spawning anything. What a clock cannot show — that the interrupt shape is
+right, that a restarted process answers, that the ladder ends a real turn — was
+checked by hand against claude 2.1.267. `docs/next.md` says what was seen.

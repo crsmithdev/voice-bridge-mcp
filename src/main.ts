@@ -1,40 +1,66 @@
 #!/usr/bin/env bun
 /**
- * voice-bridge-mcp serve [--port 3000] [--projects ~/.voice-bridge-mcp/projects.toml] [--jobs ~/.voice-bridge-mcp/jobs]
- * voice-bridge-mcp token                      print a fresh token for projects.toml
- * voice-bridge-mcp check <dir>                validate the mcp.toml in a project directory and list its tools
+ * The text round trip (spec 7.2). Voice comes at 7.3; this loop is useful on
+ * its own, and it is where the process management gets tested.
+ *
+ *   bun src/main.ts chat <project-dir>    a spoken conversation, typed
+ *   bun src/main.ts config                the settings and where they come from
  */
-import { parseArgs } from "node:util";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { randomBytes } from "node:crypto";
-import { createServer, parseProjects } from "./server.ts";
-import { Jobs } from "./jobs.ts";
-import { parseManifest } from "./manifest.ts";
+import { DEFAULTS, configPath, loadConfig, type Config } from "./config.ts";
+import { Session } from "./session.ts";
 
-const HOME = process.env.HOME ?? ".";
-const [cmd, ...rest] = process.argv.slice(2);
+function showConfig(config: Config): void {
+  console.log(`config: ${configPath()}`);
+  for (const [key, value] of Object.entries(config)) {
+    const isDefault = JSON.stringify(value) === JSON.stringify(DEFAULTS[key as keyof Config]);
+    console.log(`  ${key} = ${JSON.stringify(value)}${isDefault ? "" : "   (set)"}`);
+  }
+}
 
-switch (cmd) {
-  case "serve": {
-    const { values } = parseArgs({ args: rest, options: { port: { type: "string", default: "3000" }, projects: { type: "string", default: join(HOME, ".voice-bridge-mcp", "projects.toml") }, jobs: { type: "string", default: join(HOME, ".voice-bridge-mcp", "jobs") } } });
-    const projects = parseProjects(readFileSync(values.projects, "utf8"), values.projects);
-    const server = createServer(projects, new Jobs(values.jobs), { port: Number(values.port) });
-    console.log(`voice-bridge-mcp on http://${server.hostname}:${server.port}  projects: ${Object.keys(projects).join(", ")}`);
-    break;
+async function chat(dir: string, config: Config): Promise<void> {
+  // 5.5 the reply arrives word by word. Here it goes straight to the terminal;
+  // at 7.3 the same hook feeds the sentence collector of 5.6.
+  let streamed = false;
+  const session = new Session(dir, config, {
+    onDelta: (text) => { streamed = true; process.stdout.write(text); },
+    // 2.3 at 7.3 this is spoken; here it keeps a long turn from looking hung
+    onNarration: (text) => console.log(`[${text}]`),
+    onCheckpoint: (ms) => console.log(`\n[this turn has run ${Math.round(ms / 60_000)} minutes. say "${config.agreementWord}" to let it run]`),
+    onInterrupt: (reason) => console.log(`\n[interrupting the turn: ${reason}]`),
+    onRestart: (reason) => console.log(`\n[restarting Claude Code: ${reason}]`),
+  });
+  session.start();
+  console.log(`Claude Code in ${dir}, model ${config.model}. Ctrl-D to leave.`);
+
+  for await (const line of console) {
+    const text = line.trim();
+    if (!text) continue;
+    // 8.6.4 the agreement word is heard here in text, and by voice at 7.3
+    if (text.toLowerCase() === config.agreementWord.toLowerCase()) { session.agree(); console.log("[continuing]"); continue; }
+    try {
+      streamed = false;
+      const turn = await session.ask(text);
+      console.log(streamed ? "\n" : `\n${turn.text}\n`);
+      const fraction = session.contextFraction();
+      const context = fraction === null ? "" : `, context ${Math.round(fraction * 100)}% of the compaction threshold`;
+      console.log(`[turn ${turn.number}, $${session.totalCostUsd().toFixed(4)} this session${context}]`);
+    } catch (error) {
+      console.log(`\n[${(error as Error).message}]`);
+    }
   }
-  case "token":
-    console.log(randomBytes(24).toString("base64url"));
-    break;
-  case "check": {
-    const dir = rest[0];
-    if (!dir) { console.error("usage: voice-bridge-mcp check <dir>"); process.exit(1); }
-    const path = join(dir, "mcp.toml");
-    const m = parseManifest(readFileSync(path, "utf8"), path);
-    for (const [name, t] of Object.entries(m.tools)) console.log(`${name.padEnd(14)} ${t.background ? "background " : "immediate  "} ${t.command.join(" ")}  [${Object.keys(t.args ?? {}).join(", ")}]`);
-    break;
-  }
-  default:
-    console.error("usage: voice-bridge-mcp serve [--port N] [--projects FILE] [--jobs DIR] | token | check <dir>");
-    process.exit(cmd ? 1 : 0);
+  session.stop();
+}
+
+const [command, ...rest] = process.argv.slice(2);
+const config = loadConfig();
+
+if (command === "config") {
+  showConfig(config);
+} else if (command === "chat") {
+  const dir = rest[0];
+  if (!dir) { console.error("usage: bun src/main.ts chat <project-dir>"); process.exit(2); }
+  await chat(dir, config);
+} else {
+  console.error("usage: bun src/main.ts <chat <project-dir> | config>");
+  process.exit(2);
 }

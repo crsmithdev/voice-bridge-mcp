@@ -1,17 +1,13 @@
 {
-  "name": "voice-bridge-mcp",
+  "name": "voice-bridge",
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "bin": { "voice-bridge-mcp": "src/main.ts" },
+  "bin": { "voice-bridge": "src/main.ts" },
   "scripts": {
-    "serve": "bun src/main.ts serve",
+    "chat": "bun src/main.ts chat",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bun": "latest",
