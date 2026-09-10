@@ -159,7 +159,20 @@ async function connect({ url, token }) {
   await room.connect(url, token);
   await room.localParticipant.setMicrophoneEnabled(true);
   window.__room = room;
+  keepAwake();
 }
+
+// The mic only stays open while the screen is on. The lock releases whenever
+// the tab leaves the foreground, so it is re-requested on return.
+let wakeLock = null;
+async function keepAwake() {
+  if (!("wakeLock" in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request("screen"); }
+  catch { /* not fatal: the screen may just dim on its own */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && window.__room) keepAwake();
+});
 
 function tell(value) {
   const room = window.__room;
